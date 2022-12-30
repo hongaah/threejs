@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<title>three.js webgl - OBJLoader + MTLLoader</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<style>
+		* {
+			margin: 0;
+			overflow-y: hidden;
+		}
+		body {
+			background-color: #ffffff;
+		}
+		.model-wrap {
+			position: relative;
+			width: 500px;
+			height: 500px;
+			cursor: pointer;
+			position: relative;
+		}
+
+		/* 进度条 */
+		.model-progress{
+			position: relative;
+			width: 100%;
+			height: 100%;
+		}
+		.model-progress .mask{
+			position: relative;
+			width: 100%;
+			height: 100%;
+			background: #f2f2f2;
+			z-index: 99;
+		}
+		.model-progress .loading {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			width: 100%;
+			height: 100%;
+			z-index: 100;
+			position: absolute;
+			left: 50%;
+			top: 50%;
+			transform: translate(-50%, -50%);
+			transition: all 6s ease-in-out;
+		}
+		.loading .text {
+			text-align: center;
+			font-size: 12px;
+			margin-bottom: 10px;
+			color: #888;
+			letter-spacing: 1px;
+		}
+		.model-progress .trends-wrap{
+			width: 60%;
+			height: 1%;
+			background: #ffffff;
+			border-radius: 10px;
+		}
+		.model-progress .trends{
+			width: 0;
+			height: 100%;
+			background: #0099443a;
+			box-shadow: 1px 1px 10px #0099443a;
+			border-radius: 10px;
+		}
+
+		@keyframes moveAnimation {
+			0% {
+				left: 50%;
+			}
+			25% {
+				left: 45%;
+			}
+			50% {
+				left: 50%;
+			}
+			75% {
+				left: 55%;
+			}
+			100% {
+				left: 50%;
+			}
+		}
+		.tips-wrap {
+			width: 100%;
+			height: 100%;
+			position: absolute;
+			top: 0;
+			left: 0;
+		}
+		.tips {
+			width: 20%;
+			height: 20%;
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			animation: moveAnimation 5s linear infinite;
+		}
+		.tips .pointer {
+			width: 60%;
+			height: 55%;
+		}
+		.tips .text {
+			text-align: center;
+			font-size: 12px;
+			margin-bottom: 10px;
+			color: #f3f3f3;
+			letter-spacing: 1px;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="model-wrap">
+		<div id="model-progress" class="model-progress">
+			<div class="mask"></div>
+			<div class="loading">
+				<div class="text">正在加载模型...</div>
+				<div class="trends-wrap">
+					<div class="trends"></div>
+				</div>
+			</div>
+		</div>
+		<div id="tips" class="tips-wrap">
+			<div class="tips">
+				<div class="pointer">
+					<svg enable-background="new 0 0 74.5 65.188" viewBox="0 0 74.5 65.188" xmlns="http://www.w3.org/2000/svg">
+						<g fill="#f2f2f2">
+							<path d="m46.959 36.802c-.434 0-.682.081-1.069.223-.563-1.278-1.757-2.176-3.236-2.176-.777 0-1.455.25-2.047.67-.661-.91-1.622-1.507-2.826-1.507-.799 0-2.039 1.014-2.039 1.457l-.496-8.583c0-1.995-1.383-3.289-3.378-3.289s-3.119 1.612-3.119 3.607l.667 16.974-1.345-1.616c-1.253-1.552-3.655-2.297-5.207-1.043-1.552 1.253-.85 4.048.403 5.601l7.036 10.102c.448.555 2.02 2.373 5.832 2.373h5.975c8.64 0 8.14-10.411 8.14-10.411v-5.591-3.162c0-1.997-1.296-3.629-3.291-3.629z"/>
+							<path d="m66.75 34.594-8.5-8.037v4.037h-8v9h8v3.037z" opacity=".6"/>
+							<path d="m6.75 34.594 8.5 8.037v-3.037h9v-9h-9v-4.037z" opacity=".6"/>
+						</g>
+					</svg>
+				</div>
+				<div class="text">
+					点击旋转模型
+				</div>
+			</div>
+		</div>
+		<div id="3dModel" class="model"></div>
+	</div>
+
+	<script type="module">
+		import * as THREE from './three.module.js';
+		// import { DDSLoader } from './DDSLoader.js';
+		// import { MTLLoader } from './MTLLoader.js';
+		// import { OBJLoader } from './OBJLoader.js';
+		import { OrbitControls } from './OrbitControls.js';
+		import { GLTFLoader } from './GLTFLoader.js';
+
+		var container, scene, camera, renderer, controls;
+		var windowHalfX = window.innerWidth / 2;
+		var windowHalfY = window.innerHeight / 2;
+
+		init();
+		animate();
+
+		function init() {
+			// ambientlignt 环境光 全局颜色，会把场景中所有物体渲染为相同颜色
+			var ambientLight = new THREE.AmbientLight(0xf5f5f5, 0.7);
+
+			// 单点发光，照射所有方向，不会产生阴影
+			var pointLight = new THREE.PointLight(0xf5f5f5, 0.6);
+
+			document.querySelector(".tips-wrap").addEventListener("mousedown", (event) => {
+				document.querySelector(".tips-wrap").style.display = "none";
+			})
+
+			scene = new THREE.Scene();
+
+			// camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+			camera = new THREE.PerspectiveCamera(45, 1, 1, 1000);
+
+			scene.add(ambientLight);
+			camera.add(pointLight);
+			scene.add(camera);
+
+			// 模型
+			// 设置模型距离屏幕的距离
+			camera.position.set(-230, 85, 250); // 针对核镜
+			camera.lookAt(scene.position);
+
+			// 加载进度
+			var onProgress = function (xhr) {
+				if (xhr.lengthComputable) {
+					var percentComplete = xhr.loaded / xhr.total * 100;
+					play(Math.round(percentComplete, 2))
+				}
+			};
+
+			// 错误处理
+			var onError = function () { };
+
+			// 加载模型 obj + mtl
+			// var manager = new THREE.LoadingManager();
+			// manager.addHandler(/\.dds$/i, new DDSLoader());
+			// new MTLLoader(manager)
+			// 	.setPath('./numirror/')
+			// 	.load('numirror.mtl', function(materials) {
+			// 		materials.preload();
+			// 		new OBJLoader(manager)
+			// 			.setMaterials(materials)
+			// 			.setPath('./numirror/')
+			// 			.load('numirror.obj', function(object) {
+			// 				object.position.y = -45;
+			// 				scene.add(object);
+			// 				console.log(getObjectHalfSize(object));
+			// 			}, onProgress, onError);
+			// 	});
+
+			// 加载模型 gltf
+			var loader = new GLTFLoader();
+			// loader.load('./numirror/numirror.glb', function (gltf) {
+			// loader.load('https://img.numirr.com/numirror.glb', function (gltf) {
+			// loader.load('https://img.numirr.com/indoor.glb', function (gltf) {
+			loader.load('https://img.numirr.com/czt.glb', function (gltf) {
+				var model = gltf.scene;
+				var bbox = new THREE.Box3().setFromObject(model);
+				var cent = bbox.getCenter(new THREE.Vector3());
+				var size = bbox.getSize(new THREE.Vector3());
+				//Rescale the object to normalized space
+				var maxAxis = Math.max(size.x, size.y, size.z);
+				model.scale.multiplyScalar(150 / maxAxis);
+				bbox.setFromObject(model);
+				bbox.getCenter(cent);
+				bbox.getSize(size);
+				//Reposition to 0,halfY,0
+				model.position.copy(cent).multiplyScalar(-1);
+				model.position.y += (size.y * 0.05)
+				scene.add(model);
+			}, onProgress, onError);
+			
+			// 渲染器
+			renderer = new THREE.WebGLRenderer({
+				antialias: true
+			});
+			renderer.setClearColor(0xffffff, 0.95);
+			renderer.setPixelRatio(window.devicePixelRatio);
+			// renderer.setSize(window.innerWidth, window.innerHeight);
+			renderer.setSize(500, 500); // 模型大小
+
+			// 添加模型
+			document.getElementById('3dModel').appendChild(renderer.domElement);
+
+			// 控制器（控制转动模型）
+			controls = new OrbitControls(camera, renderer.domElement);
+			controls.rotateSpeed = 0.5 // 旋转速度
+			controls.enableDamping = false // 是否有惯性
+			controls.enableZoom = true // 是否可以缩放
+			controls.enablePan = false // 右键拖拽
+			controls.autoRotate = false // 自动旋转
+			controls.minDistance = 80 // 模型距离屏幕最近距离
+			controls.maxDistance = 300 // 模型距离屏幕最远据伦理
+			renderer.domElement.removeAttribute("tabindex") // 去掉点击 canvas 时产生的黑色边框
+			// window.addEventListener('resize', onWindowResize, false);
+		}
+
+		// 响应式
+		// function onWindowResize() {
+		// 	windowHalfX = window.innerWidth / 2;
+		// 	windowHalfY = window.innerHeight / 2;
+		// 	// 观察范围的长宽比
+		// 	camera.aspect = window.innerWidth / window.innerHeight;
+		// 	camera.updateProjectionMatrix();
+		// 	renderer.setSize(window.innerWidth, window.innerHeight);
+		// }
+
+		// 获取模型宽高
+		function getObjectHalfSize (obj) {
+			var objectBox = new THREE.Box3();
+			objectBox.setFromObject(obj);
+			return objectBox.max.clone().sub(objectBox.min).divideScalar(2);
+    };
+
+		// 进度条
+		function play (a) {
+			document.getElementsByClassName("trends")[0].style.width = a + "%";
+			if (a < 100) {
+				document.getElementById("model-progress").style.display = "block";
+			} else {
+				document.getElementById("model-progress").style.display = "none";
+			}
+		}
+
+		// 更新模型，时刻渲染
+		function animate() {
+			controls.update();
+			renderer.render(scene, camera);
+			requestAnimationFrame(animate);
+		}
+	</script>
+</body>
+
+</html>
